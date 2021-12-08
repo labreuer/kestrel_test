@@ -1,0 +1,126 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home page";
+}
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+
+<div class="text-center">
+  <script src="/js/go.js"></script>
+  <script src="/js/person.js"></script>
+  <script src="/js/flowchart.js"></script>
+  <script src="/js/sequence.js"></script>
+  <script id="code">
+    
+    // Show the diagram's model in JSON format that the user may edit
+    function save() {
+      document.getElementById("workflowModel").value = d_flow.model.toJson();
+      d_flow.isModified = false;
+    }
+    function load() {
+      fetch(`/api/workflow/${$('#SelectedWorkflow').val()}`)
+        .then(function (response) {
+          $('#workflowModel').text(response);
+          return response.json();
+        })
+        .then(function (json) {
+          window.wjson = json;
+          if (window.last_workflow != json.id) {
+            window.last_workflow = json.id;
+            d_flow.model = go.Model.fromJson(json.contents);
+          }
+        });
+          //d_flow.model = go.Model.fromJson(document.getElementById("mySavedModel").value);
+    }
+
+    // Show the diagram's model in JSON format
+    function save_sequence() {
+      document.getElementById("sequenceModel").value = window.d_sequence.model.toJson();
+      window.d_sequence.isModified = false;
+    }
+    function load_sequence() {
+      window.d_sequence.model = go.Model.fromJson(document.getElementById("sequenceModel").value);
+    }
+    // Call init on page load
+    window.addEventListener('DOMContentLoaded', () => init_person('divPerson', '/api/person/'));
+    window.addEventListener('DOMContentLoaded', () => window.d_flow = init_flowchart('divFlowchart', 'divPalette', load));
+    window.addEventListener('DOMContentLoaded', () => { window.d_sequence = init_sequence('divSequence', load_sequence); load_sequence(); });
+    window.addEventListener('DOMContentLoaded', () => $('#SelectedWorkflow').click(load));
+  </script>
+  <script id="code2">
+  
+
+
+</script>
+  <div>
+    <div id="divSequence" style="border: solid 1px black; width:600px; height:400px; float: right"></div>
+    <div id="divPerson" style="border: solid 1px black; width:400px; height:400px"></div>
+  </div>
+  <select asp-for="SelectedWorkflow" asp-items="Model.WorkflowsSelect"></select> 
+<div style="width: 100%; display: flex; justify-content: space-between">
+  <div id="divPalette" style="width: 100px; margin-right: 2px; background-color: #282c34;"></div>
+  <div id="divFlowchart" style="flex-grow: 1; height: 750px; background-color: #282c34;"></div>
+</div>
+  <textarea id="workflowModel" style="width:100%;height:300px">
+{ "class": "go.GraphLinksModel",
+"linkFromPortIdProperty": "fromPort",
+"linkToPortIdProperty": "toPort",
+"nodeDataArray": [
+{"category":"Comment", "loc":"360 -10", "text":"Kookie Brittle", "key":-13},
+{"key":-1, "category":"Start", "loc":"175 0", "text":"Start"},
+{"key":0, "loc":"-5 75", "text":"Preheat oven to 375 F"},
+{"key":1, "loc":"175 100", "text":"In a bowl, blend: 1 cup margarine, 1.5 teaspoon vanilla, 1 teaspoon salt"},
+{"key":2, "loc":"175 200", "text":"Gradually beat in 1 cup sugar and 2 cups sifted flour"},
+{"key":3, "loc":"175 290", "text":"Mix in 6 oz (1 cup) Nestle's Semi-Sweet Chocolate Morsels"},
+{"key":4, "loc":"175 380", "text":"Press evenly into ungreased 15x10x1 pan"},
+{"key":5, "loc":"355 85", "text":"Finely chop 1/2 cup of your choice of nuts"},
+{"key":6, "loc":"175 450", "text":"Sprinkle nuts on top"},
+{"key":7, "loc":"175 515", "text":"Bake for 25 minutes and let cool"},
+{"key":8, "loc":"175 585", "text":"Cut into rectangular grid"},
+{"key":-2, "category":"End", "loc":"175 660", "text":"Enjoy!"}
+],
+"linkDataArray": [
+{"from":1, "to":2, "fromPort":"B", "toPort":"T"},
+{"from":2, "to":3, "fromPort":"B", "toPort":"T"},
+{"from":3, "to":4, "fromPort":"B", "toPort":"T"},
+{"from":4, "to":6, "fromPort":"B", "toPort":"T"},
+{"from":6, "to":7, "fromPort":"B", "toPort":"T"},
+{"from":7, "to":8, "fromPort":"B", "toPort":"T"},
+{"from":8, "to":-2, "fromPort":"B", "toPort":"T"},
+{"from":-1, "to":0, "fromPort":"B", "toPort":"T"},
+{"from":-1, "to":1, "fromPort":"B", "toPort":"T"},
+{"from":-1, "to":5, "fromPort":"B", "toPort":"T"},
+{"from":5, "to":4, "fromPort":"B", "toPort":"T"},
+{"from":0, "to":4, "fromPort":"B", "toPort":"T"}
+]}
+</textarea>
+<textarea id="sequenceModel" style="width:100%;height:240px">
+{ "class": "go.GraphLinksModel",
+  "nodeDataArray": [
+{"key":"Fred", "text":"Fred: Patron", "isGroup":true, "loc":"0 0", "duration":9},
+{"key":"Bob", "text":"Bob: Waiter", "isGroup":true, "loc":"100 0", "duration":9},
+{"key":"Hank", "text":"Hank: Cook", "isGroup":true, "loc":"200 0", "duration":9},
+{"key":"Renee", "text":"Renee: Cashier", "isGroup":true, "loc":"300 0", "duration":9},
+{"group":"Bob", "start":1, "duration":2},
+{"group":"Hank", "start":2, "duration":3},
+{"group":"Fred", "start":3, "duration":1},
+{"group":"Bob", "start":5, "duration":1},
+{"group":"Fred", "start":6, "duration":2},
+{"group":"Renee", "start":8, "duration":1}
+ ],
+  "linkDataArray": [
+{"from":"Fred", "to":"Bob", "text":"order", "time":1},
+{"from":"Bob", "to":"Hank", "text":"order food", "time":2},
+{"from":"Bob", "to":"Fred", "text":"serve drinks", "time":3},
+{"from":"Hank", "to":"Bob", "text":"finish cooking", "time":5},
+{"from":"Bob", "to":"Fred", "text":"serve food", "time":6},
+{"from":"Fred", "to":"Renee", "text":"pay", "time":8}
+ ]}
+    </textarea>
+    <h1 class="display-4">Welcome</h1>
+    <p>Learn about <a href="https://docs.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+     @foreach (var t in Model.People)
+    {
+        @Html.Raw($"<div># {t.FirstName}</div>");
+    }
+</div>
