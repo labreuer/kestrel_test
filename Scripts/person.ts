@@ -1,8 +1,11 @@
-﻿function init_person(div, url) {
+﻿//// <reference path="../wwwroot/js/go-debug.d.ts" />
+import * as go from '../node_modules/gojs/release/go-debug-module.js';
+
+export function init_person(div, url) {
 
   let $ = go.GraphObject.make;  // for conciseness in defining templates
 
-  d_person = $(go.Diagram, div,  // create a Diagram for the DIV HTML element
+  let d_person = $(go.Diagram, div,  // create a Diagram for the DIV HTML element
     {
       "undoManager.isEnabled": true  // enable undo & redo
     });
@@ -39,10 +42,10 @@
       return response.json();
     })
     .then(function (json) {
-      window.json = json;
       d_person.model = new go.GraphLinksModel(
         json.people.map(e => ({ key: e.id, text: `${e.firstName} ${e.lastName}`, color: "lightblue" })),
         json.personPerson.map(e => ({ from: e.primaryPersonId, to: e.secondaryPersonId }))
       );
     });
+  return d_person;
 }

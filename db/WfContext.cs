@@ -11,12 +11,13 @@ namespace kestrel_test
         {
         }
 
-        public WfContext(DbContextOptions options) : base(options) { }
+        public WfContext(DbContextOptions<WfContext> options) : base(options) { }
 
         public virtual DbSet<Organization> Organizations { get; set; }
         public virtual DbSet<OrganizationPerson> OrganizationPeople { get; set; }
         public virtual DbSet<Person> People { get; set; }
         public virtual DbSet<PersonPerson> PersonPerson { get; set; }
+        public virtual DbSet<Sequence> Sequences { get; set; }
         public virtual DbSet<Test> Tests { get; set; }
         public virtual DbSet<Workflow> Workflows { get; set; }
 
@@ -100,6 +101,31 @@ namespace kestrel_test
                     .HasForeignKey(d => d.SecondaryPersonId)
                     .OnDelete(DeleteBehavior.ClientSetNull)
                     .HasConstraintName("person_person_secondary_person_id_fkey");
+            });
+
+            modelBuilder.Entity<Sequence>(entity =>
+            {
+                entity.ToTable("sequence");
+
+                entity.Property(e => e.Id).HasColumnName("id");
+
+                entity.Property(e => e.Contents)
+                    .IsRequired()
+                    .HasColumnType("character varying")
+                    .HasColumnName("contents");
+
+                entity.Property(e => e.Title)
+                    .IsRequired()
+                    .HasMaxLength(200)
+                    .HasColumnName("title");
+
+                entity.Property(e => e.WorkflowId).HasColumnName("workflow_id");
+
+                entity.HasOne(d => d.Workflow)
+                    .WithMany(p => p.Sequences)
+                    .HasForeignKey(d => d.WorkflowId)
+                    .OnDelete(DeleteBehavior.ClientSetNull)
+                    .HasConstraintName("sequence_workflow_id_fkey");
             });
 
             modelBuilder.Entity<Test>(entity =>

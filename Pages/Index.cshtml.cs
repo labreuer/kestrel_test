@@ -23,7 +23,7 @@ namespace kestrel_test.Pages
 			_logger = logger;
 			Tests = context.Tests.ToArray();
 			People = context.People.ToArray();
-			Workflows = context.Workflows.ToArray();
+			Workflows = context.Workflows.OrderBy(w => w.Id).ToArray();
 		}
 
 		public void OnGet()

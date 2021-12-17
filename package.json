@@ -1,0 +1,17 @@
+{
+  "name": "kestrel_test",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "gojs": "^2.1.55"
+  },
+  "devDependencies": {
+    "@types/jquery": "^3.5.10"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}

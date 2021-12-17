@@ -39,3 +39,5 @@ msbuild.wrn
 # custom
 GoJS/
 *.bz2
+node_modules/
+package-lock.json

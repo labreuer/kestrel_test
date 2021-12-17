@@ -1,7 +1,10 @@
-﻿function init_flowchart(divFlowchart, divPalette, load) {
+﻿//// <reference path="../wwwroot/js/go-debug.d.ts" />
+import * as go from '../node_modules/gojs/release/go-debug-module.js';
+
+export function init_flowchart(divFlowchart, divPalette) {
   var $ = go.GraphObject.make;  // for conciseness in defining templates
 
-  d_flow =
+  let d_flow =
     $(go.Diagram, divFlowchart,  // must name or refer to the DIV HTML element
       {
         "LinkDrawn": showLinkLabel,  // this DiagramEvent listener is defined below
@@ -11,7 +14,7 @@
 
   // when the document is modified, add a "*" to the title and enable the "Save" button
   d_flow.addDiagramListener("Modified", function (e) {
-    var button = document.getElementById("SaveButton");
+    var button = document.getElementById("SaveButton") as HTMLButtonElement;
     if (button) button.disabled = !d_flow.isModified;
     var idx = document.title.indexOf("*");
     if (d_flow.isModified) {
@@ -201,8 +204,8 @@
         reshapable: true,
         resegmentable: true,
         // mouse-overs subtly highlight links:
-        mouseEnter: function (e, link) { link.findObject("HIGHLIGHT").stroke = "rgba(30,144,255,0.2)"; },
-        mouseLeave: function (e, link) { link.findObject("HIGHLIGHT").stroke = "transparent"; },
+        mouseEnter: (e: go.InputEvent, link: go.GraphObject) => { if (link instanceof go.Link) (link.findObject("HIGHLIGHT") as go.Shape).stroke = "rgba(30,144,255,0.2)"; },
+        mouseLeave: (e: go.InputEvent, link: go.GraphObject) => { if (link instanceof go.Link) (link.findObject("HIGHLIGHT") as go.Shape).stroke = "transparent"; },
         selectionAdorned: false
       },
       new go.Binding("points").makeTwoWay(),
@@ -240,10 +243,10 @@
   d_flow.toolManager.linkingTool.temporaryLink.routing = go.Link.Orthogonal;
   d_flow.toolManager.relinkingTool.temporaryLink.routing = go.Link.Orthogonal;
 
-  load();  // load an initial diagram from some JSON text
+  //load();  // load an initial diagram from some JSON text
 
   // initialize the Palette that is on the left side of the page
-  myPalette =
+  let myPalette =
     $(go.Palette, "divPalette",  // must name or refer to the DIV HTML element
       {
         // Instead of the default animation, use a custom fade-down

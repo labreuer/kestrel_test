@@ -1,0 +1,21 @@
+{
+  "compileOnSave": true,
+  "compilerOptions": {
+    "noImplicitAny": false,
+    "noEmitOnError": true,
+    "removeComments": false,
+    "sourceMap": true,
+    "target": "ES6",
+    "rootDir": "Scripts",
+    "outDir": "wwwroot/js",
+    "moduleResolution": "Node"
+  },
+  "paths": {
+    "go-debug-module": [ "node_modules/gojs/release" ]
+  },
+  "exclude": [
+    "node_modules",
+    "wwwroot",
+    "GoJS"
+  ]
+}

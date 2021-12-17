@@ -11,47 +11,47 @@ namespace kestrel_test.db
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class WorkflowController : ControllerBase
+    public class SequenceController : ControllerBase
     {
         private readonly WfContext _context;
 
-        public WorkflowController(WfContext context)
+        public SequenceController(WfContext context)
         {
             _context = context;
         }
 
-        // GET: api/Workflow
+        // GET: api/Sequences
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Workflow>>> GetWorkflows()
+        public async Task<ActionResult<IEnumerable<Sequence>>> GetSequences()
         {
-            return await _context.Workflows.ToListAsync();
+            return await _context.Sequences.ToListAsync();
         }
 
-        // GET: api/Workflow/5
+        // GET: api/Sequences/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Workflow>> GetWorkflow(int id)
+        public async Task<ActionResult<Sequence>> GetSequence(int id)
         {
-            var workflow = await _context.Workflows.Include(w => w.Sequences).FirstOrDefaultAsync(w => w.Id == id);
+            var sequence = await _context.Sequences.FindAsync(id);
 
-            if (workflow == null)
+            if (sequence == null)
             {
                 return NotFound();
             }
 
-            return workflow;
+            return sequence;
         }
 
-        // PUT: api/Workflow/5
+        // PUT: api/Sequences/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutWorkflow(int id, Workflow workflow)
+        public async Task<IActionResult> PutSequence(int id, Sequence sequence)
         {
-            if (id != workflow.Id)
+            if (id != sequence.Id)
             {
                 return BadRequest();
             }
 
-            _context.Entry(workflow).State = EntityState.Modified;
+            _context.Entry(sequence).State = EntityState.Modified;
 
             try
             {
@@ -59,7 +59,7 @@ namespace kestrel_test.db
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!WorkflowExists(id))
+                if (!SequenceExists(id))
                 {
                     return NotFound();
                 }
@@ -72,36 +72,36 @@ namespace kestrel_test.db
             return NoContent();
         }
 
-        // POST: api/Workflow
+        // POST: api/Sequences
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Workflow>> PostWorkflow(Workflow workflow)
+        public async Task<ActionResult<Sequence>> PostSequence(Sequence sequence)
         {
-            _context.Workflows.Add(workflow);
+            _context.Sequences.Add(sequence);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetWorkflow", new { id = workflow.Id }, workflow);
+            return CreatedAtAction("GetSequence", new { id = sequence.Id }, sequence);
         }
 
-        // DELETE: api/Workflow/5
+        // DELETE: api/Sequences/5
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteWorkflow(int id)
+        public async Task<IActionResult> DeleteSequence(int id)
         {
-            var workflow = await _context.Workflows.FindAsync(id);
-            if (workflow == null)
+            var sequence = await _context.Sequences.FindAsync(id);
+            if (sequence == null)
             {
                 return NotFound();
             }
 
-            _context.Workflows.Remove(workflow);
+            _context.Sequences.Remove(sequence);
             await _context.SaveChangesAsync();
 
             return NoContent();
         }
 
-        private bool WorkflowExists(int id)
+        private bool SequenceExists(int id)
         {
-            return _context.Workflows.Any(e => e.Id == id);
+            return _context.Sequences.Any(e => e.Id == id);
         }
     }
 }

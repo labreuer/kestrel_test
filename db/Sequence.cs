@@ -1,19 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace kestrel_test
 {
-    public partial class Workflow
+    public partial class Sequence
     {
-        public Workflow()
-        {
-            Sequences = new HashSet<Sequence>();
-        }
-
         public int Id { get; set; }
         public string Title { get; set; }
+        public int WorkflowId { get; set; }
         public string Contents { get; set; }
 
-        public virtual ICollection<Sequence> Sequences { get; set; }
+        [JsonIgnore]
+        public virtual Workflow Workflow { get; set; }
     }
 }

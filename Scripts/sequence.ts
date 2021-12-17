@@ -1,4 +1,11 @@
-﻿function init_sequence(div) {
+﻿// @ts-nocheck
+
+//// <reference path="../wwwroot/js/go-debug.d.ts" />
+import * as go from '../node_modules/gojs/release/go-debug-module.js';
+
+let myDiagram: go.Diagram;
+
+export function init_sequence(div) {
   var $ = go.GraphObject.make;
 
   myDiagram =
@@ -192,6 +199,7 @@ function MessageLink() {
   go.Link.call(this);
   this.time = 0;  // use this "time" value when this is the temporaryLink
 }
+
 go.Diagram.inherit(MessageLink, go.Link);
 
 MessageLink.prototype.getLinkPoint = function (node, port, spot, from, ortho, othernode, otherport) {
