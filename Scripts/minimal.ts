@@ -1,210 +1,190 @@
 ﻿'use strict';
 
-///import * as go from '../wwwroot/js/go-debug.js';
-//// <reference path="../wwwroot/js/go-debug.d.ts" />
-//import * as $ from "../wwwroot/lib/jquery/dist/jquery.min.js";
-//// <reference path="../node_modules/@types/jquery/index.d.ts" />
 import * as go from '../node_modules/gojs/release/go-debug-module.js';
 import { init_flowchart } from './flowchart.js';
 
-// index is the workflow ID
-let workflows: any[];
-
-function load_workflows<T>() {
-  return fetch(`/api/workflow/`)
-    .then(response => response.json())
-    .then(json => json.reduce((a, x) => ({ ...a, [x.id]: x }), {}));
+interface Workflow {
+  id: number;
+  title: string;
+  contents: string;
 }
+
+interface ExtendedWorkflow extends Workflow {
+  children: { [key: number]: WorkflowWorkflow };
+}
+
+interface WorkflowWorkflow {
+  id: number;
+  title: string;
+  parentWorkflowId: number;
+  childWorkflowId: number;
+  parentWorkflowNode: number;
+}
+
+class WorkflowManager {
+  div: HTMLElement;
+  palette: HTMLElement;
+  select: HTMLSelectElement;
+  save: HTMLButtonElement;
+  create: HTMLButtonElement;
+  title: HTMLInputElement;
+  diagram: go.Diagram;
+  workflows: { [key: number]: ExtendedWorkflow };
+  workflow: ExtendedWorkflow;
+  cascade: (m: WorkflowManager, w: ExtendedWorkflow) => void;
+
+  constructor(
+    div: HTMLElement,
+    palette: HTMLElement,
+    select: HTMLSelectElement,
+    save: HTMLButtonElement,
+    create: HTMLButtonElement,
+    title: HTMLInputElement,
+    workflows: { [key: number]: ExtendedWorkflow },
+    idCreator: () => number,
+    cascade: (m: WorkflowManager, w: ExtendedWorkflow) => void = null
+  ) {
+    this.div = div;
+    this.palette = palette;
+    this.select = select;
+    this.save = save;
+    this.create = create;
+    this.title = title;
+
+    this.workflows = workflows;
+    this.cascade = cascade;
+
+    this.diagram = init_flowchart(div, palette);
+    this.diagram.animationManager.initialAnimationStyle = go.AnimationManager.None;
+
+    this.select.addEventListener('change', e => {
+      const id = parseInt(this.select.value);
+      this.workflow = workflows[id];
+      this.load_workflow(this.workflow);      
+    });
+    this.save.addEventListener('click', e => this.save_workflow());
+    this.create.addEventListener('click', e => this.new_workflow(idCreator()));
+  }
+
+  load_workflow(w: ExtendedWorkflow) {
+    this.workflow = w;
+    this.diagram.model = go.Model.fromJson(w.contents);
+    this.title.value = w.title;
+    this.select.value = w.id.toString();
+    this.cascade(this, this.workflow);
+  }
+
+  populate_select(ws: Workflow[], includeEmpty: boolean = false) {
+    const sel = $(this.select);
+    sel.empty();
+    if (includeEmpty)
+      sel.append(new Option("", "0"));
+    if (ws.length > 0) {
+      ws.sort((a, b) => a.id > b.id ? 1 : -1)
+        .forEach(e => sel.append(new Option(e.title, e.id.toString())));
+    }
+  }
+
+  save_workflow() {
+    const w = this.workflow;
+
+    this.save.disabled = true;
+    w.contents = this.diagram.model.toJson();
+    w.title = this.title.value;
+    this.select.options.item(this.select.selectedIndex).text = w.title;
+
+    const isNew = w.id < 0;
+
+    if (isNew) {
+      const oldId = w.id;
+      //delete oldJson.id;
+
+      fetch(`/api/workflow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(w)
+      }).then(response => response.json())
+        .then(json => <Workflow>json)
+        .then(new_w => {
+          this.save.disabled = false;
+          w.id = new_w.id;
+          $(`option[value=${oldId}]`, this.select).val(new_w.id);
+        });
+    } else {
+      fetch(`/api/workflow/${w.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(w)
+      }).then(response => {
+        this.save.disabled = false;
+      });
+    }
+  }
+
+  new_workflow(new_id: number) {
+    const w = {
+      id: new_id,
+      title: `[New: ${new_id}]`,
+      contents: "{}",
+      children: {}
+    };
+    this.load_workflow(w);
+    this.select.appendChild(new Option(w.title, w.id.toString(), undefined, true));
+  }
+
+  static fetch_all_workflows(): Promise<Workflow[] | {}> {
+    return fetch(`/api/workflow/`)
+      .then(response => response.json())
+      .then(json => <Workflow[]>json)
+      .then(json => json.reduce((a, x) => ({ ...a, [x.id]: x }), {}));
+  }
+}
+
+let workflowWorkflows: { [key: number]: WorkflowWorkflow[] };
+let workflows: { [key: number]: Workflow };
 
 function load_workflowworkflows<T>() {
   return fetch('/api/workflowworkflows')
     .then(response => response.json())
-    .then(json => json.reduce((a, x) => ({ ...a, [x.id]: x }), {}));
-}
-
-function populate_workflow(flow: go.Diagram, json: any, children: any[], child: go.Diagram, childSelect: HTMLSelectElement, childTitle: HTMLInputElement) {
-  flow.model = go.Model.fromJson(json.contents);
-
-  let sel = $(childSelect);
-  sel.empty();
-  if (children.length > 0) {
-    sel.append(new Option("", "0"));
-    children.sort((a, b) => a.id > b.id ? 1 : -1)
-      .forEach(e => sel.append(new Option(e.title, e.id)));
-  }
-}
-
-async function save_workflow(flow: go.Diagram, oldJson, save: HTMLButtonElement, select: HTMLSelectElement) {
-  save.disabled = true;
-  oldJson.contents = flow.model.toJson();
-  select.options.item(select.selectedIndex).text = oldJson.title;
-
-  let isNew = oldJson.id < 0;
-
-  if (isNew) {
-    let oldId = oldJson.id;
-    delete oldJson.id;
-
-    fetch(`/api/workflow`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(oldJson)
-    }).then(response => response.json())
-      .then(json => {
-        save.disabled = false;
-        oldJson.id = json.id;
-        $(`option[value=${oldId}]`, select).val(json.id);
-      });
-  } else {
-    fetch(`/api/workflow/${oldJson.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(oldJson)
-    }).then(response => {
-        save.disabled = false;
-      });
-  }
-}
-
-let newWorkflowId: number = 0;
-
-function new_workflow(flow: go.Diagram, select: HTMLSelectElement, title: HTMLInputElement) {
-  flow.clear();
-  let newJson = {
-    id: --newWorkflowId,
-    title: `[New: ${newWorkflowId}]`,
-    contents: {}
-  };
-  title.value = newJson.title;
-  select.appendChild(new Option(newJson.title, newJson.id.toString(), undefined, true));
+    .then(json => <WorkflowWorkflow[]>json);
+    //.then(json => json.reduce((a, x) => ({ ...a, [x.id]: x }), {}));
 }
 
 export async function init() {
-  const el = document.getElementById.bind(document);
-  const controls = {
-    person: { div: el('divPerson') },
-    child: {
-      div: el('divWorkflow2'),
-      palette: el('divPalette2'),
-      select: <HTMLSelectElement>el('SelectedWorkflow2'),
-      save: <HTMLButtonElement>el('saveWorkflow2'),
-      new: <HTMLButtonElement>el('newWorkflow2'),
-      title: <HTMLInputElement>el('workflowTitle2')
-    },
-    workflow: {
-      div: el('divWorkflow'),
-      palette: el('divPalette'),
-      select: <HTMLSelectElement>el('SelectedWorkflow'),
-      save: <HTMLButtonElement>el('saveWorkflow'),
-      new: <HTMLButtonElement>el('newWorkflow'),
-      title: <HTMLInputElement>el('workflowTitle')
-    }
-  };
-  const diagrams = {
-    workflow: init_flowchart(controls.workflow.div, controls.workflow.palette),
-    child: init_flowchart(controls.child.div, controls.child.palette),
-  };
-  for (var k in diagrams)
-    (<go.Diagram>diagrams[k]).animationManager.initialAnimationStyle = go.AnimationManager.None;
+  const workflows = <{ [key: number]: ExtendedWorkflow }>await WorkflowManager.fetch_all_workflows();
+  const xref = await load_workflowworkflows();
+  Object.values(workflows).forEach(w => w.children = {});
+  xref.forEach(ww => workflows[ww.parentWorkflowId].children[ww.id] = ww);
 
-  let workflows = await load_workflows();
-  let xref = await load_workflowworkflows();
-
-  let e_workflow = () => {
-    var id = controls.workflow.select.value;
-    var myChildren = Object.values(xref)
-      .filter(child => (child as any).parentWorkflowId == id);
-    populate_workflow(
-      diagrams.workflow, workflows[id],
-      myChildren, diagrams.child, controls.child.select, controls.child.title);
-    controls.workflow.title.value = workflows[id].title;
+  let newWorkflowId: number = 0;
+  function idCreator() {
+    return --newWorkflowId;
   }
-  const get_wjson = () => workflows[controls.workflow.select.value];
 
+  function el<T extends HTMLElement>(id) {
+    return <T>document.getElementById(id);
+  }
+  const child = new WorkflowManager(
+    el<HTMLElement>('divWorkflow2'),
+    el<HTMLElement>('divPalette2'),
+    el<HTMLSelectElement>('SelectedWorkflow2'),
+    el<HTMLButtonElement>('saveWorkflow2'),
+    el<HTMLButtonElement>('newWorkflow2'),
+    el<HTMLInputElement>('workflowTitle2'),
+    workflows,
+    idCreator
+  ); 
+  const parent = new WorkflowManager(
+    el<HTMLElement>('divWorkflow'),
+    el<HTMLElement>('divPalette'),
+    el<HTMLSelectElement>('SelectedWorkflow'),
+    el<HTMLButtonElement>('saveWorkflow'),
+    el<HTMLButtonElement>('newWorkflow'),
+    el<HTMLInputElement>('workflowTitle'),
+    workflows,
+    idCreator,
+    (m, w) => child.populate_select(Object.values(w.children).map(ww => workflows[ww.childWorkflowId]), true)
+  );
 
-  controls.workflow.select.addEventListener("change", e_workflow);
-  //?controls.sequence.select.addEventListener("change", () => load_sequence(diagrams.sequence, controls.sequence.select, controls.sequence.title));
-  controls.workflow.save.addEventListener("click", () => save_workflow(diagrams.workflow, get_wjson(), controls.workflow.save, controls.workflow.select));
-  controls.workflow.title.addEventListener("change", e => get_wjson().title = (e.srcElement as HTMLInputElement).value);
-  controls.workflow.new.addEventListener("click", () => new_workflow(diagrams.workflow, controls.workflow.select, controls.workflow.title));
-  e_workflow();
-
-  controls.child.select.addEventListener("change", () => {
-    if (controls.child.select.value == "0") {
-      diagrams.child.clear();
-    } else {
-      populate_workflow(diagrams.child, workflows[xref[controls.child.select.value].childWorkflowId], [], null, null, null);
-    }
-  })
-
-  //?controls.sequence.save.addEventListener("click", () => save_sequence(diagrams.sequence, controls.sequence.save, controls.sequence.select));
-  //?controls.sequence.title.addEventListener("change", e => sequences[controls.sequence.select.value].title = (e.srcElement as HTMLInputElement).value);
-  //?controls.sequence.new.addEventListener("click", () => new_sequence(diagrams.sequence, workflowJson.id, controls.sequence.select, controls.sequence.title));
-
-  /*
-{"text":"drink","key":-2,"loc":"99 252"}
-{"key":-11,"loc":"270 329","text":"serve food"},
-{"key":0,"loc":"99 175","text":"deliver drinks"},
-{"key":1,"loc":"175 100","text":"order food & drink"},
-{"key":2,"loc":"270 175","text":"hand off to cook"},
-{"key":3,"loc":"270 250","text":"cook food"},
-{"key":4,"loc":"270 329","text":"serve food"},
-{"key":6,"loc":"177 418","text":"eat & drink"},
-{"key":7,"loc":"177 483","text":"pay cashier"},
-  */
-
-  var assignments = {
-    "Hank": [3],
-    "Fred": [-2, 1, 6, 7],
-    "Bob": [-11, 0, 1, 2, 4],
-    "Renee": [7]
-  };
-
-  var unselect = (diagram: go.Diagram) => diagram.nodes.each(n => n.isSelected = false);
-
-  /*
-  diagrams.person.addDiagramListener("ChangedSelection", () => {
-    unselect(diagrams.sequence);
-    unselect(diagrams.workflow);
-    diagrams.person.selection.each(n => {
-      if (n instanceof go.Node) {
-        const key = n.data.text.trim();
-        diagrams.sequence.findNodeForKey(key).isSelected = true;
-        assignments[key].forEach(id => diagrams.workflow.findNodeForKey(id).isSelected = true);
-      }
-    });
-  });
-
-  diagrams.sequence.addDiagramListener("ChangedSelection", () => {
-    unselect(diagrams.person);
-    unselect(diagrams.workflow);
-    diagrams.sequence.selection.each(n => {
-      if (n instanceof go.Node) {
-        const key = n.data.key.trim();
-        let p = diagrams.person.model.nodeDataArray.filter(n => n.text.trim() == key)[0];
-        diagrams.person.findNodeForData(p).isSelected = true;
-        assignments[key].forEach(id => diagrams.workflow.findNodeForKey(id).isSelected = true);
-      }
-    });
-  });
-
-  diagrams.workflow.addDiagramListener("ChangedSelection", () => {
-    unselect(diagrams.person);
-    unselect(diagrams.sequence);
-    diagrams.workflow.selection.each(n => {
-      if (n instanceof go.Node) {
-        const key = n.data.key;
-        for (let k in assignments) {
-          if (assignments[k].includes(key)) {
-            let p = diagrams.person.model.nodeDataArray.filter(n => n.text.trim() == k)[0];
-            diagrams.person.findNodeForData(p).isSelected = true;
-            diagrams.sequence.findNodeForKey(k).isSelected = true;
-          }
-        }
-      }
-    });
-  });
-  */
-
-  (window as any).diagrams = diagrams;
+  parent.load_workflow(workflows[7])
 }
