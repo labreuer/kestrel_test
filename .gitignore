@@ -41,3 +41,6 @@ GoJS/
 *.bz2
 node_modules/
 package-lock.json
+wwwroot/js/*.js
+wwwroot/js/*.js.map
+

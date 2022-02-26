@@ -31,7 +31,10 @@ namespace kestrel_test.db
         [HttpGet("{id}")]
         public async Task<ActionResult<Workflow>> GetWorkflow(int id)
         {
-            var workflow = await _context.Workflows.Include(w => w.Sequences).FirstOrDefaultAsync(w => w.Id == id);
+            var workflow = await _context.Workflows
+                .Include(w => w.Sequences)
+                //.Include(w => w.WorkflowWorkflowChildWorkflows)
+                .FirstOrDefaultAsync(w => w.Id == id);
 
             if (workflow == null)
             {

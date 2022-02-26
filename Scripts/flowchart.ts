@@ -247,7 +247,7 @@ export function init_flowchart(divFlowchart, divPalette) {
 
   // initialize the Palette that is on the left side of the page
   let myPalette =
-    $(go.Palette, "divPalette",  // must name or refer to the DIV HTML element
+    $(go.Palette, divPalette,  // must name or refer to the DIV HTML element
       {
         // Instead of the default animation, use a custom fade-down
         "animationManager.initialAnimationStyle": go.AnimationManager.None,

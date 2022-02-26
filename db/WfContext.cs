@@ -20,6 +20,8 @@ namespace kestrel_test
         public virtual DbSet<Sequence> Sequences { get; set; }
         public virtual DbSet<Test> Tests { get; set; }
         public virtual DbSet<Workflow> Workflows { get; set; }
+        public virtual DbSet<WorkflowWorkflow> WorkflowWorkflows { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -152,6 +154,36 @@ namespace kestrel_test
                     .IsRequired()
                     .HasMaxLength(200)
                     .HasColumnName("title");
+            });
+
+            modelBuilder.Entity<WorkflowWorkflow>(entity =>
+            {
+                entity.ToTable("workflow_workflow");
+
+                entity.Property(e => e.Id).HasColumnName("id");
+
+                entity.Property(e => e.ChildWorkflowId).HasColumnName("child_workflow_id");
+
+                entity.Property(e => e.ParentWorkflowId).HasColumnName("parent_workflow_id");
+
+                entity.Property(e => e.ParentWorkflowNode).HasColumnName("parent_workflow_node");
+
+                entity.Property(e => e.Title)
+                    .IsRequired()
+                    .HasMaxLength(200)
+                    .HasColumnName("title");
+
+                entity.HasOne(d => d.ChildWorkflow)
+                    .WithMany(p => p.WorkflowWorkflowChildWorkflows)
+                    .HasForeignKey(d => d.ChildWorkflowId)
+                    .OnDelete(DeleteBehavior.ClientSetNull)
+                    .HasConstraintName("workflow_workflow_child_workflow_id_fkey");
+
+                entity.HasOne(d => d.ParentWorkflow)
+                    .WithMany(p => p.WorkflowWorkflowParentWorkflows)
+                    .HasForeignKey(d => d.ParentWorkflowId)
+                    .OnDelete(DeleteBehavior.ClientSetNull)
+                    .HasConstraintName("workflow_workflow_parent_workflow_id_fkey");
             });
 
             OnModelCreatingPartial(modelBuilder);
