@@ -85,6 +85,7 @@ class WorkflowManager {
     }
   }
 
+  // TODO: handle failed fetches
   save_workflow() {
     const w = this.workflow;
 
@@ -97,7 +98,6 @@ class WorkflowManager {
 
     if (isNew) {
       const oldId = w.id;
-      //delete oldJson.id;
 
       fetch(`/api/workflow`, {
         method: 'POST',
@@ -132,7 +132,8 @@ class WorkflowManager {
     this.select.appendChild(new Option(w.title, w.id.toString(), undefined, true));
   }
 
-  static fetch_all_workflows(): Promise<Workflow[] | {}> {
+  // TODO: handle failed fetches
+  static fetch_all_workflows(): Promise<{ [key: number]: Workflow }> {
     return fetch(`/api/workflow/`)
       .then(response => response.json())
       .then(json => <Workflow[]>json)
@@ -140,14 +141,11 @@ class WorkflowManager {
   }
 }
 
-let workflowWorkflows: { [key: number]: WorkflowWorkflow[] };
-let workflows: { [key: number]: Workflow };
-
-function load_workflowworkflows<T>() {
+// TODO: handle failed fetches
+function load_workflowworkflows(): Promise<WorkflowWorkflow[]> {
   return fetch('/api/workflowworkflows')
     .then(response => response.json())
     .then(json => <WorkflowWorkflow[]>json);
-    //.then(json => json.reduce((a, x) => ({ ...a, [x.id]: x }), {}));
 }
 
 export async function init() {
@@ -173,7 +171,14 @@ export async function init() {
     el<HTMLInputElement>('workflowTitle2'),
     workflows,
     idCreator
-  ); 
+  );
+
+  function cascade_to_child(m: WorkflowManager, w: ExtendedWorkflow) {
+    child.populate_select(Object.values(w.children).map(ww => workflows[ww.childWorkflowId]), true);
+    // HACK: this leaves child.workflow set to the last value
+    child.diagram.clear();
+  }
+
   const parent = new WorkflowManager(
     el<HTMLElement>('divWorkflow'),
     el<HTMLElement>('divPalette'),
@@ -183,8 +188,8 @@ export async function init() {
     el<HTMLInputElement>('workflowTitle'),
     workflows,
     idCreator,
-    (m, w) => child.populate_select(Object.values(w.children).map(ww => workflows[ww.childWorkflowId]), true)
+    cascade_to_child
   );
 
-  parent.load_workflow(workflows[7])
+  parent.load_workflow(workflows[7]);
 }
