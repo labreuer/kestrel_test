@@ -11,6 +11,7 @@
     window.addEventListener('DOMContentLoaded', init);
   </script>
 
+  <label asp-for="SelectedWorkflow">Parent workflow:</label>
   <select asp-for="SelectedWorkflow" asp-items="Model.WorkflowsSelect"></select>
   <button id="saveWorkflow">Save Workflow</button>
   <button id="newWorkflow">New Workflow</button>
@@ -19,6 +20,8 @@
     <div id="divPalette" style="width: 100px; margin-right: 2px; background-color: #282c34;"></div>
     <div id="divWorkflow" style="flex-grow: 1; height: 750px; background-color: #282c34;"></div>
   </div>
+
+  <label for="SelectedWorkflow2">Child workflow:</label>
   <select id="SelectedWorkflow2"></select>
   <button id="saveWorkflow2">Save Child Workflow</button>
   <button id="newWorkflow2">New Child Workflow</button>
@@ -27,4 +30,8 @@
     <div id="divPalette2" style="width: 100px; margin-right: 2px; background-color: #282c34;"></div>
     <div id="divWorkflow2" style="flex-grow: 1; height: 350px; background-color: #282c34;"></div>
   </div>
+  <hr/>
 </div>
+
+<h4>Audit Log</h4>
+<ul id="auditLog"></ul>

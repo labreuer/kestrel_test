@@ -22,6 +22,8 @@ interface WorkflowWorkflow {
 }
 
 class WorkflowManager {
+  private static readonly BlankSelectId = "0";
+
   div: HTMLElement;
   palette: HTMLElement;
   select: HTMLSelectElement;
@@ -31,7 +33,7 @@ class WorkflowManager {
   diagram: go.Diagram;
   workflows: { [key: number]: ExtendedWorkflow };
   workflow: ExtendedWorkflow;
-  cascade: (m: WorkflowManager, w: ExtendedWorkflow) => void;
+  onWorkflowChanged: (m: WorkflowManager, w: ExtendedWorkflow) => void;
 
   constructor(
     div: HTMLElement,
@@ -42,7 +44,7 @@ class WorkflowManager {
     title: HTMLInputElement,
     workflows: { [key: number]: ExtendedWorkflow },
     idCreator: () => number,
-    cascade: (m: WorkflowManager, w: ExtendedWorkflow) => void = null
+    onWorkflowChanged: (m: WorkflowManager, w: ExtendedWorkflow) => void = null
   ) {
     this.div = div;
     this.palette = palette;
@@ -52,7 +54,7 @@ class WorkflowManager {
     this.title = title;
 
     this.workflows = workflows;
-    this.cascade = cascade;
+    this.onWorkflowChanged = onWorkflowChanged;
 
     this.diagram = init_flowchart(div, palette);
     this.diagram.animationManager.initialAnimationStyle = go.AnimationManager.None;
@@ -64,21 +66,39 @@ class WorkflowManager {
     });
     this.save.addEventListener('click', e => this.save_workflow());
     this.create.addEventListener('click', e => this.new_workflow(idCreator()));
+    this.save.disabled = true;
+  }
+
+  clear() {
+    this.load_workflow(null);
   }
 
   load_workflow(w: ExtendedWorkflow) {
     this.workflow = w;
-    this.diagram.model = go.Model.fromJson(w.contents);
-    this.title.value = w.title;
-    this.select.value = w.id.toString();
-    this.cascade(this, this.workflow);
+    this.title.value = w?.title ?? "";
+    this.save.disabled = w == null;
+
+    // N.B. events don't fire when you programmatically change a value
+    // https://stackoverflow.com/questions/19329978/change-selects-option-and-trigger-events-with-javascript
+    if (w != null) {
+      this.diagram.model = go.Model.fromJson(w.contents);
+      this.select.value = w.id.toString();
+    }
+    else {
+      this.diagram.clear();
+      this.select.value = WorkflowManager.BlankSelectId;
+      this.save.disabled = true;
+    }
+
+    if (this.onWorkflowChanged)
+      this.onWorkflowChanged(this, this.workflow);
   }
 
   populate_select(ws: Workflow[], includeEmpty: boolean = false) {
     const sel = $(this.select);
     sel.empty();
     if (includeEmpty)
-      sel.append(new Option("", "0"));
+      sel.append(new Option("", WorkflowManager.BlankSelectId));
     if (ws.length > 0) {
       ws.sort((a, b) => a.id > b.id ? 1 : -1)
         .forEach(e => sel.append(new Option(e.title, e.id.toString())));
@@ -88,6 +108,9 @@ class WorkflowManager {
   // TODO: handle failed fetches
   save_workflow() {
     const w = this.workflow;
+
+    if (w == null)
+      throw "Cannot save workflow when it is null."
 
     this.save.disabled = true;
     w.contents = this.diagram.model.toJson();
@@ -148,7 +171,27 @@ function load_workflowworkflows(): Promise<WorkflowWorkflow[]> {
     .then(json => <WorkflowWorkflow[]>json);
 }
 
+const auditLog = document.getElementById('auditLog');
+function audit(o: any, ...children: any[]) {
+  function li(o: any): HTMLLIElement {
+    const e = document.createElement('li');
+    e.appendChild(document.createTextNode(o));
+    return e;
+  }
+  const parent = li(o);
+  if (children && children.length > 0) {
+    const ul = document.createElement('ul');
+    children.forEach(c => ul.appendChild(li(c)));
+    parent.appendChild(ul);
+  }
+  auditLog.insertBefore(parent, auditLog.childNodes[0]);
+}
+
 export async function init() {
+  function el<T extends HTMLElement>(id) {
+    return <T>document.getElementById(id);
+  }
+  // cast from Workflow -> ExtendedWorkflow; we will then populate the additional field
   const workflows = <{ [key: number]: ExtendedWorkflow }>await WorkflowManager.fetch_all_workflows();
   const xref = await load_workflowworkflows();
   Object.values(workflows).forEach(w => w.children = {});
@@ -159,9 +202,6 @@ export async function init() {
     return --newWorkflowId;
   }
 
-  function el<T extends HTMLElement>(id) {
-    return <T>document.getElementById(id);
-  }
   const child = new WorkflowManager(
     el<HTMLElement>('divWorkflow2'),
     el<HTMLElement>('divPalette2'),
@@ -173,10 +213,16 @@ export async function init() {
     idCreator
   );
 
-  function cascade_to_child(m: WorkflowManager, w: ExtendedWorkflow) {
+  function onParentWorkflowChanged(m: WorkflowManager, w: ExtendedWorkflow) {
+    Object.values(w.children)
+      .forEach(c => {
+        audit(JSON.stringify(c), m.diagram.findNodeForKey(c.parentWorkflowNode));
+        m.diagram.findNodeForKey(c.parentWorkflowNode).isShadowed = true;
+      });
+
     child.populate_select(Object.values(w.children).map(ww => workflows[ww.childWorkflowId]), true);
-    // HACK: this leaves child.workflow set to the last value
-    child.diagram.clear();
+    child.clear();
+    child.create.disabled = true;
   }
 
   const parent = new WorkflowManager(
@@ -188,8 +234,34 @@ export async function init() {
     el<HTMLInputElement>('workflowTitle'),
     workflows,
     idCreator,
-    cascade_to_child
+    onParentWorkflowChanged
   );
 
   parent.load_workflow(workflows[7]);
+
+  parent.diagram.addDiagramListener('ChangedSelection', () => {
+    const selected = parent.diagram.selection.filter(n => n instanceof go.Node);
+    const compatibleWithChildren = selected.count == 1;
+
+    // 1. control whether one can add child workflows
+    child.create.disabled = !compatibleWithChildren;
+
+    // 2. display child workflow
+    if (!compatibleWithChildren)
+      return;
+
+    const node = <go.Node>selected.first();
+    const children = Object
+      .values(parent.workflow.children)
+      .filter(c => c.parentWorkflowNode == <number>node.key);
+    audit("single node selected in parent: " + node.key.toString(), `${children.length} child workflow(s)`);
+    if (children.length == 0)
+      return;
+
+    // TODO: do we only change the child workflow if it hasn't been altered?
+    const w = workflows[children[0].childWorkflowId];
+    // don't re-select
+    if (child.workflow != w)
+      child.load_workflow(w);
+  });
 }
