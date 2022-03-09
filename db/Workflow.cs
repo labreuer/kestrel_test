@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace kestrel_test
 {
@@ -12,6 +13,7 @@ namespace kestrel_test
             WorkflowWorkflowParentWorkflows = new HashSet<WorkflowWorkflow>();
         }
 
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int Id { get; set; }
         public string Title { get; set; }
         public string Contents { get; set; }

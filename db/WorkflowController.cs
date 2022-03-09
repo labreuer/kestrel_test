@@ -80,6 +80,8 @@ namespace kestrel_test.db
         [HttpPost]
         public async Task<ActionResult<Workflow>> PostWorkflow(Workflow workflow)
         {
+            // JS currently assigns a temporary negative value; erase that and let the DB set the identity
+            workflow.Id = 0;
             _context.Workflows.Add(workflow);
             await _context.SaveChangesAsync();
 

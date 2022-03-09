@@ -33,7 +33,10 @@ class WorkflowManager {
   diagram: go.Diagram;
   workflows: { [key: number]: ExtendedWorkflow };
   workflow: ExtendedWorkflow;
+  // TODO: consider making these real events
   onWorkflowChanged: (m: WorkflowManager, w: ExtendedWorkflow) => void;
+  onWorkflowCreating: (m: WorkflowManager, wPartial: ExtendedWorkflow) => void;
+  onWorkflowSaved: (m: WorkflowManager, w: ExtendedWorkflow, oldId: number) => void;
 
   constructor(
     div: HTMLElement,
@@ -43,8 +46,7 @@ class WorkflowManager {
     create: HTMLButtonElement,
     title: HTMLInputElement,
     workflows: { [key: number]: ExtendedWorkflow },
-    idCreator: () => number,
-    onWorkflowChanged: (m: WorkflowManager, w: ExtendedWorkflow) => void = null
+    idCreator: () => number
   ) {
     this.div = div;
     this.palette = palette;
@@ -54,7 +56,6 @@ class WorkflowManager {
     this.title = title;
 
     this.workflows = workflows;
-    this.onWorkflowChanged = onWorkflowChanged;
 
     this.diagram = init_flowchart(div, palette);
     this.diagram.animationManager.initialAnimationStyle = go.AnimationManager.None;
@@ -106,7 +107,7 @@ class WorkflowManager {
   }
 
   // TODO: handle failed fetches
-  save_workflow() {
+  async save_workflow() {
     const w = this.workflow;
 
     if (w == null)
@@ -118,30 +119,33 @@ class WorkflowManager {
     this.select.options.item(this.select.selectedIndex).text = w.title;
 
     const isNew = w.id < 0;
+    const oldId = w.id;
+    let t: Promise<any>;
 
     if (isNew) {
-      const oldId = w.id;
-
-      fetch(`/api/workflow`, {
+      t = fetch(`/api/workflow`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(w)
       }).then(response => response.json())
         .then(json => <Workflow>json)
         .then(new_w => {
-          this.save.disabled = false;
           w.id = new_w.id;
           $(`option[value=${oldId}]`, this.select).val(new_w.id);
         });
     } else {
-      fetch(`/api/workflow/${w.id}`, {
+      t = fetch(`/api/workflow/${w.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(w)
-      }).then(response => {
-        this.save.disabled = false;
       });
     }
+
+    t.then(() => {
+      if (this.onWorkflowSaved != null)
+        this.onWorkflowSaved(this, this.workflow, oldId);
+      this.save.disabled = false;
+    });
   }
 
   new_workflow(new_id: number) {
@@ -151,6 +155,8 @@ class WorkflowManager {
       contents: "{}",
       children: {}
     };
+    if (this.onWorkflowCreating)
+      this.onWorkflowCreating(this, w);
     this.load_workflow(w);
     this.select.appendChild(new Option(w.title, w.id.toString(), undefined, true));
   }
@@ -169,6 +175,29 @@ function load_workflowworkflows(): Promise<WorkflowWorkflow[]> {
   return fetch('/api/workflowworkflows')
     .then(response => response.json())
     .then(json => <WorkflowWorkflow[]>json);
+}
+
+// TODO: handle failed fetches
+async function save_workflowworkflow(ww: WorkflowWorkflow) {
+  const isNew = ww.id < 0;
+
+  if (isNew) {
+    fetch(`/api/workflowworkflows`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ww)
+    }).then(response => response.json())
+      .then(json => <WorkflowWorkflow>json)
+      .then(new_w => {
+        ww.id = new_w.id;
+      });
+  } else {
+    fetch(`/api/workflow/${ww.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ww)
+    });
+  }
 }
 
 const auditLog = document.getElementById('auditLog');
@@ -202,6 +231,16 @@ export async function init() {
     return --newWorkflowId;
   }
 
+  const parent = new WorkflowManager(
+    el<HTMLElement>('divWorkflow'),
+    el<HTMLElement>('divPalette'),
+    el<HTMLSelectElement>('SelectedWorkflow'),
+    el<HTMLButtonElement>('saveWorkflow'),
+    el<HTMLButtonElement>('newWorkflow'),
+    el<HTMLInputElement>('workflowTitle'),
+    workflows,
+    idCreator
+  );
   const child = new WorkflowManager(
     el<HTMLElement>('divWorkflow2'),
     el<HTMLElement>('divPalette2'),
@@ -212,32 +251,70 @@ export async function init() {
     workflows,
     idCreator
   );
-
   function onParentWorkflowChanged(m: WorkflowManager, w: ExtendedWorkflow) {
-    Object.values(w.children)
-      .forEach(c => {
-        audit(JSON.stringify(c), m.diagram.findNodeForKey(c.parentWorkflowNode));
-        m.diagram.findNodeForKey(c.parentWorkflowNode).isShadowed = true;
-      });
+    Object
+      .values(w.children)
+      .forEach(c => m.diagram.findNodeForKey(c.parentWorkflowNode).isShadowed = true);
 
     child.populate_select(Object.values(w.children).map(ww => workflows[ww.childWorkflowId]), true);
     child.clear();
     child.create.disabled = true;
   }
+  parent.onWorkflowChanged = onParentWorkflowChanged;
+  function onChildWorkflowCreating(m: WorkflowManager, wPartial: ExtendedWorkflow) {
+    // 1.
+    workflows[wPartial.id] = wPartial;
 
-  const parent = new WorkflowManager(
-    el<HTMLElement>('divWorkflow'),
-    el<HTMLElement>('divPalette'),
-    el<HTMLSelectElement>('SelectedWorkflow'),
-    el<HTMLButtonElement>('saveWorkflow'),
-    el<HTMLButtonElement>('newWorkflow'),
-    el<HTMLInputElement>('workflowTitle'),
-    workflows,
-    idCreator,
-    onParentWorkflowChanged
-  );
+    // 2.
+    const selected = parent.diagram.selection.filter(n => n instanceof go.Node);
+    const compatibleWithChildren = selected.count == 1;
 
-  parent.load_workflow(workflows[7]);
+    if (!compatibleWithChildren)
+      throw `Found ${selected.count} selected nodes in the parent; need precisely 1 to create child workflows.`;
+    const node = <go.Node>selected.first();
+    const newId = idCreator();
+    parent.workflow.children[newId] = {
+      id: newId,
+      title: node.name,
+      parentWorkflowId: parent.workflow.id,
+      childWorkflowId: wPartial.id,
+      parentWorkflowNode: parseInt(node.key.toString())
+    };
+    node.isShadowed = true;
+  }
+  child.onWorkflowCreating = onChildWorkflowCreating;
+  parent.onWorkflowCreating = (m: WorkflowManager, wPartial: ExtendedWorkflow) => {
+    // HACK: code duplication
+    // 1.
+    workflows[wPartial.id] = wPartial;
+  };
+  async function onWorkflowSaved(m: WorkflowManager, w: ExtendedWorkflow, oldId: number) {
+    // 1.
+    if (w.id != oldId) {
+      delete workflows[oldId];
+      workflows[w.id] = w;
+    }
+
+    // 2.
+    const wws = Object
+      .values(parent.workflow.children)
+      .filter(ww => ww.id < 0 && ww.childWorkflowId == oldId);
+    if (wws.length == 0 || oldId > 0)
+      return;
+
+    const ww = wws[0];
+    const oldWwId = ww.id;
+    ww.childWorkflowId = w.id;
+    await save_workflowworkflow(ww);
+    delete parent.workflow.children[oldWwId];
+    parent.workflow.children[ww.id] = ww;
+  }
+  child.onWorkflowSaved = onWorkflowSaved;
+
+  // when a workflow is saved:
+  //   1. there can be new WorkflowWorkflows that need saving
+  //   2. there can be child Workflows that need prompting or saving (need to decide)
+  //      * although as-is, if you switch away from an unsaved child workflow, it is de facto deleted
 
   parent.diagram.addDiagramListener('ChangedSelection', () => {
     const selected = parent.diagram.selection.filter(n => n instanceof go.Node);
@@ -264,4 +341,6 @@ export async function init() {
     if (child.workflow != w)
       child.load_workflow(w);
   });
+
+  parent.load_workflow(workflows[7]);
 }
