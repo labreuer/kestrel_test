@@ -310,6 +310,30 @@ export async function init() {
     parent.workflow.children[ww.id] = ww;
   }
   child.onWorkflowSaved = onWorkflowSaved;
+  const ShadowColors = {
+    ChildVisible: "red",
+    Otherwise: "gray"
+  };
+  let lastParentNode: go.Node;
+  function onChildWorkflowChanged(m: WorkflowManager, w: ExtendedWorkflow) {
+    if (lastParentNode != null) {
+      lastParentNode.shadowColor = ShadowColors.Otherwise;
+      lastParentNode = null;
+    }
+    if (w == null)
+      return;
+    const wws = Object
+      .values(parent.workflow.children)
+      .filter(ww => ww.childWorkflowId == w.id);
+    if (wws.length == 0)
+      throw "Expected to find one child WorkflowWorkflow";
+    if (wws.length > 1)
+      throw "Cannot yet handle more than one child WorkflowWorkflow";
+    const ww = wws[0];
+    lastParentNode = parent.diagram.findNodeForKey(ww.parentWorkflowNode);
+    lastParentNode.shadowColor = ShadowColors.ChildVisible;
+  }
+  child.onWorkflowChanged = onChildWorkflowChanged;
 
   // when a workflow is saved:
   //   1. there can be new WorkflowWorkflows that need saving
