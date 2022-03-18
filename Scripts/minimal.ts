@@ -342,6 +342,22 @@ export async function init() {
 
   parent.diagram.addDiagramListener('ChangedSelection', () => {
     const selected = parent.diagram.selection.filter(n => n instanceof go.Node);
+
+    // 0. show children which match selected parent nodes
+    const nodes = new Set(Object
+      .values(parent.workflow.children)
+      .map(c => c.parentWorkflowNode));
+    let matches;
+    if (selected.any(p => nodes.has(parseInt(<string>p.key)))) {
+      matches = Object
+        .values(parent.workflow.children)
+        .filter(w => selected.any(p => w.parentWorkflowNode == <number>p.key));
+    } else {
+      matches = Object.values(parent.workflow.children)
+    }
+    console.log(matches);
+    child.populate_select(matches.map(ww => workflows[ww.childWorkflowId]), true);
+
     const compatibleWithChildren = selected.count == 1;
 
     // 1. control whether one can add child workflows
