@@ -202,6 +202,7 @@ async function save_workflowworkflow(ww: WorkflowWorkflow) {
 
 const auditLog = document.getElementById('auditLog');
 function audit(o: any, ...children: any[]) {
+  return;
   function li(o: any): HTMLLIElement {
     const e = document.createElement('li');
     e.appendChild(document.createTextNode(o));
