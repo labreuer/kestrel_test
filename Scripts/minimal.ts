@@ -216,7 +216,22 @@ function audit(o: any, ...children: any[]) {
   auditLog.insertBefore(parent, auditLog.childNodes[0]);
 }
 
+function genUUID() {
+  // Reference: https://stackoverflow.com/a/2117523/709884
+  return ("10000000-1000-4000-8000-100000000000").replace(/[018]/g, s => {
+    const c = Number.parseInt(s, 10)
+    return (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+  })
+}
+
 export async function init() {
+  const myGuid = genUUID();
+  let auditId: number = 0;
+  function newAuditId() {
+    return ++auditId;
+  }
+  const lastAppliedAudit = <{ [key: string]: number }>{};
+
   function el<T extends HTMLElement>(id) {
     return <T>document.getElementById(id);
   }
@@ -340,6 +355,42 @@ export async function init() {
   //   2. there can be child Workflows that need prompting or saving (need to decide)
   //      * although as-is, if you switch away from an unsaved child workflow, it is de facto deleted
 
+  let noProcessChange = false;
+
+  parent.diagram.addDiagramListener('ChangedSelection', () => {
+    if (noProcessChange)
+      return;
+
+    const x = parent.diagram.selection.filter(n => n instanceof go.Node).map(p => p.key).toArray();
+    (window as any).my_x = x;
+    console.log(`/api/selection/${parent.workflow.id}`);
+    fetch(`/api/selection/${parent.workflow.id}.${myGuid}.${newAuditId()}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(x)
+    });
+  });
+
+  setInterval(() => {
+    fetch(`/api/selection/${parent.workflow.id}`)
+      .then(response => response.json())
+      .then(json => {
+        noProcessChange = true;
+        (json as []).forEach((v: any) => {
+          if (v.guid == myGuid)
+            return;
+          const last = lastAppliedAudit[v.guid];
+          if (!last || last < v.id) {
+            parent.diagram.clearSelection();
+            v.jsonElement.forEach(key => parent.diagram.findPartForKey(key).isSelected = true);
+            lastAppliedAudit[v.guid] = v.id;
+            //console.log(v.jsonElement);
+          }
+        });
+        noProcessChange = false;
+      });
+    }, 50);
+
   parent.diagram.addDiagramListener('ChangedSelection', () => {
     const selected = parent.diagram.selection.filter(n => n instanceof go.Node);
 
@@ -383,4 +434,7 @@ export async function init() {
   });
 
   parent.load_workflow(workflows[7]);
+  const w = window as any;
+  w.w_parent = parent;
+  w.w_child = child;
 }
