@@ -1,0 +1,5 @@
+fetch(`/api/selection/25`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: "{}"
+    });
