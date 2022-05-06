@@ -1,5 +1,6 @@
 ﻿'use strict';
 
+import { DiagramEvent } from 'gojs';
 import * as go from '../node_modules/gojs/release/go-debug-module.js';
 import { init_flowchart } from './flowchart.js';
 
@@ -19,6 +20,32 @@ interface WorkflowWorkflow {
   parentWorkflowId: number;
   childWorkflowId: number;
   parentWorkflowNode: number;
+}
+
+interface AuditedEvent {
+  guid: string;
+  id: number;
+}
+
+interface AuditedSelection extends AuditedEvent {
+  nodeIds: number[];
+}
+
+interface AuditedNodeRename extends AuditedEvent {
+  nodeId: number;
+  oldName: string;
+  newName: string;
+}
+
+interface Audits {
+  selections: AuditedSelection[];
+  nodeRenames: AuditedNodeRename[];
+}
+
+interface NodeRename {
+  nodeId: number;
+  oldName: string;
+  newName: string;
 }
 
 class WorkflowManager {
@@ -327,7 +354,8 @@ export async function init() {
   child.onWorkflowSaved = onWorkflowSaved;
   const ShadowColors = {
     ChildVisible: "red",
-    Otherwise: "gray"
+    Otherwise: "gray",
+    NodeRenamed: "yellow"
   };
   let lastParentNode: go.Node;
   function onChildWorkflowChanged(m: WorkflowManager, w: ExtendedWorkflow) {
@@ -364,29 +392,55 @@ export async function init() {
     const x = parent.diagram.selection.filter(n => n instanceof go.Node).map(p => p.key).toArray();
     (window as any).my_x = x;
     console.log(`/api/selection/${parent.workflow.id}`);
-    fetch(`/api/selection/${parent.workflow.id}.${myGuid}.${newAuditId()}`, {
+    fetch(`/api/selection/${parent.workflow.id}.${myGuid}.${newAuditId()}/selection`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(x)
     });
   });
 
+  parent.diagram.addDiagramListener('TextEdited', (e: go.DiagramEvent) => {
+    const tb = e.subject as go.TextBlock;
+    console.log(`/api/selection/${parent.workflow.id}`);
+    fetch(`/api/selection/${parent.workflow.id}.${myGuid}.${newAuditId()}/noderename`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(<NodeRename>{ nodeId: tb.part.key, oldName: e.parameter, newName: tb.text})
+    });
+  });
+
+  function relevantAudits<T extends AuditedEvent>(as: T[]): T[] {
+    return as.filter(a => {
+      const last = lastAppliedAudit[a.guid];
+      return a.guid != myGuid &&
+        !last || last < a.id;
+    });
+  }
+
   setInterval(() => {
     fetch(`/api/selection/${parent.workflow.id}`)
       .then(response => response.json())
-      .then(json => {
+      .then(json => <Audits>json)
+      .then(audits => {
         noProcessChange = true;
-        (json as []).forEach((v: any) => {
-          if (v.guid == myGuid)
-            return;
-          const last = lastAppliedAudit[v.guid];
-          if (!last || last < v.id) {
-            parent.diagram.clearSelection();
-            v.jsonElement.forEach(key => parent.diagram.findPartForKey(key).isSelected = true);
-            lastAppliedAudit[v.guid] = v.id;
-            //console.log(v.jsonElement);
-          }
+        const maxId = {};
+
+        relevantAudits(audits.selections).forEach(v => {
+          parent.diagram.clearSelection();
+          v.nodeIds.forEach(key => parent.diagram.findPartForKey(key).isSelected = true);
+          maxId[v.guid] = Math.max(maxId[v.guid] || 0, v.id);
         });
+        relevantAudits(audits.nodeRenames).forEach(v => {
+          const node = parent.diagram.findPartForKey(v.nodeId);
+          const tname = `changing text for node ${v.nodeId}`;
+          parent.diagram.startTransaction(tname);
+          parent.diagram.model.setDataProperty(node.data, 'text', v.newName);
+          node.shadowColor = ShadowColors.NodeRenamed;
+          node.isShadowed = true;
+          parent.diagram.commitTransaction(tname);
+          maxId[v.guid] = Math.max(maxId[v.guid] || 0, v.id);
+        });
+        Object.assign(lastAppliedAudit, maxId);
         noProcessChange = false;
       });
     }, 50);
