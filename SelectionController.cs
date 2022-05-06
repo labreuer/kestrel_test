@@ -24,10 +24,17 @@ namespace kestrel_test
         public string NewName { get; set; }
     }
 
+    public class AuditedWorkflowSelected: AuditedEvent
+    {
+        public int ParentWorkflowId { get; set;}
+        public int ChildWorkflowId { get; set; }
+    }
+
     public class Audits
     {
         public List<AuditedSelection> Selections { get; } = new List<AuditedSelection>();
         public List<AuditedNodeRename> NodeRenames { get; } = new List<AuditedNodeRename>();
+        public List<AuditedWorkflowSelected> WorkflowSelections { get; } = new List<AuditedWorkflowSelected>();
     }
 
     public class NodeRename
@@ -35,6 +42,12 @@ namespace kestrel_test
         public int NodeId { get; set; }
         public string OldName { get; set; }
         public string NewName { get; set; }
+    }
+
+    public class WorkflowSelected
+    {
+        public int ParentWorkflowId { get; set; }
+        public int ChildWorkflowId { get; set; }
     }
 
     [Route("api/[controller]")]
@@ -91,11 +104,28 @@ namespace kestrel_test
             _actions[workflowId].NodeRenames.Add(a);
         }
 
+        [HttpPut("{workflowId}.{guid}.{actionId}/workflowselected")]
+        public void Put(int workflowId, string guid, int actionId, [FromBody] WorkflowSelected value)
+        {
+            var a = new AuditedWorkflowSelected { Guid = guid, Id = actionId, ParentWorkflowId = value.ParentWorkflowId, ChildWorkflowId = value.ChildWorkflowId };
+
+            if (!_actions.ContainsKey(workflowId))
+                _actions[workflowId] = new Audits();
+
+            _actions[workflowId].WorkflowSelections.Add(a);
+        }
+
         // DELETE api/<SelectionController>/5
         [HttpDelete("{id}")]
         public void Delete(int id)
         {
             _actions.Remove(id);
+        }
+
+        [HttpDelete()]
+        public void Delete()
+        {
+            _actions.Clear();
         }
     }
 }

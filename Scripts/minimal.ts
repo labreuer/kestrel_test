@@ -37,15 +37,26 @@ interface AuditedNodeRename extends AuditedEvent {
   newName: string;
 }
 
+interface AuditedWorkflowSelected extends AuditedEvent {
+  parentWorkflowId: number;
+  childWorkflowId: number;
+}
+
 interface Audits {
   selections: AuditedSelection[];
   nodeRenames: AuditedNodeRename[];
+  workflowSelections: AuditedWorkflowSelected[];
 }
 
 interface NodeRename {
   nodeId: number;
   oldName: string;
   newName: string;
+}
+
+interface WorkflowSelected {
+  parentWorkflowId: number;
+  childWorkflowId: number;
 }
 
 class WorkflowManager {
@@ -61,6 +72,7 @@ class WorkflowManager {
   workflows: { [key: number]: ExtendedWorkflow };
   workflow: ExtendedWorkflow;
   // TODO: consider making these real events
+  onWorkflowChanging: (m: WorkflowManager, wOld: ExtendedWorkflow, wNew: ExtendedWorkflow) => void;
   onWorkflowChanged: (m: WorkflowManager, w: ExtendedWorkflow) => void;
   onWorkflowCreating: (m: WorkflowManager, wPartial: ExtendedWorkflow) => void;
   onWorkflowSaved: (m: WorkflowManager, w: ExtendedWorkflow, oldId: number) => void;
@@ -89,8 +101,7 @@ class WorkflowManager {
 
     this.select.addEventListener('change', e => {
       const id = parseInt(this.select.value);
-      this.workflow = workflows[id];
-      this.load_workflow(this.workflow);      
+      this.load_workflow(workflows[id]);
     });
     this.save.addEventListener('click', e => this.save_workflow());
     this.create.addEventListener('click', e => this.new_workflow(idCreator()));
@@ -102,6 +113,9 @@ class WorkflowManager {
   }
 
   load_workflow(w: ExtendedWorkflow) {
+    if (this.onWorkflowChanging)
+      this.onWorkflowChanging(this, this.workflow, w);
+
     this.workflow = w;
     this.title.value = w?.title ?? "";
     this.save.disabled = w == null;
@@ -258,6 +272,7 @@ export async function init() {
     return ++auditId;
   }
   const lastAppliedAudit = <{ [key: string]: number }>{};
+  let noProcessChange = false;
 
   function el<T extends HTMLElement>(id) {
     return <T>document.getElementById(id);
@@ -303,6 +318,26 @@ export async function init() {
     child.create.disabled = true;
   }
   parent.onWorkflowChanged = onParentWorkflowChanged;
+  function onParentWorkflowChanging(m: WorkflowManager, wOld: ExtendedWorkflow, wNew: ExtendedWorkflow) {
+    if (noProcessChange || wOld == null)
+      return;
+    fetch(`/api/selection/${wOld.id}.${myGuid}.${newAuditId()}/workflowselected`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(<WorkflowSelected>{ parentWorkflowId: wNew.id })
+    });
+  }
+  parent.onWorkflowChanging = onParentWorkflowChanging;
+  function onChildWorkflowChanging(m: WorkflowManager, wOld: ExtendedWorkflow, wNew: ExtendedWorkflow) {
+    if (noProcessChange || wNew == null)
+      return;
+    fetch(`/api/selection/${parent.workflow.id}.${myGuid}.${newAuditId()}/workflowselected`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(<WorkflowSelected>{ childWorkflowId: wNew.id })
+    });
+  }
+  child.onWorkflowChanging = onChildWorkflowChanging;
   function onChildWorkflowCreating(m: WorkflowManager, wPartial: ExtendedWorkflow) {
     // 1.
     workflows[wPartial.id] = wPartial;
@@ -383,15 +418,11 @@ export async function init() {
   //   2. there can be child Workflows that need prompting or saving (need to decide)
   //      * although as-is, if you switch away from an unsaved child workflow, it is de facto deleted
 
-  let noProcessChange = false;
-
   parent.diagram.addDiagramListener('ChangedSelection', () => {
     if (noProcessChange)
       return;
 
     const x = parent.diagram.selection.filter(n => n instanceof go.Node).map(p => p.key).toArray();
-    (window as any).my_x = x;
-    console.log(`/api/selection/${parent.workflow.id}`);
     fetch(`/api/selection/${parent.workflow.id}.${myGuid}.${newAuditId()}/selection`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -400,6 +431,9 @@ export async function init() {
   });
 
   parent.diagram.addDiagramListener('TextEdited', (e: go.DiagramEvent) => {
+    if (noProcessChange)
+      return;
+
     const tb = e.subject as go.TextBlock;
     console.log(`/api/selection/${parent.workflow.id}`);
     fetch(`/api/selection/${parent.workflow.id}.${myGuid}.${newAuditId()}/noderename`, {
@@ -423,6 +457,7 @@ export async function init() {
       .then(json => <Audits>json)
       .then(audits => {
         noProcessChange = true;
+        // we can't assign this to lastAppliedAudit until all calls to relevantAudits are done
         const maxId = {};
 
         relevantAudits(audits.selections).forEach(v => {
@@ -440,6 +475,14 @@ export async function init() {
           parent.diagram.commitTransaction(tname);
           maxId[v.guid] = Math.max(maxId[v.guid] || 0, v.id);
         });
+        relevantAudits(audits.workflowSelections).forEach(v => {
+          if (v.parentWorkflowId != 0)
+            parent.load_workflow(workflows[v.parentWorkflowId]);
+          if (v.childWorkflowId != 0)
+            child.load_workflow(workflows[v.childWorkflowId]);
+          maxId[v.guid] = Math.max(maxId[v.guid] || 0, v.id);
+        });
+
         Object.assign(lastAppliedAudit, maxId);
         noProcessChange = false;
       });
