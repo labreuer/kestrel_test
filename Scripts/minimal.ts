@@ -423,11 +423,15 @@ export async function init() {
       return;
 
     const x = parent.diagram.selection.filter(n => n instanceof go.Node).map(p => p.key).toArray();
-    fetch(`/api/selection/${parent.workflow.id}.${myGuid}.${newAuditId()}/selection`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(x)
-    });
+    (window as any).my_x = x;
+    console.log(`/api/selection/${parent.workflow.id}`);
+    if (!noProcessChange) {
+      fetch(`/api/selection/${parent.workflow.id}.${myGuid}.${newAuditId()}/selection`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(x)
+      });
+    }
   });
 
   parent.diagram.addDiagramListener('TextEdited', (e: go.DiagramEvent) => {
